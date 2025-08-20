@@ -18,6 +18,11 @@ BOOST_VERSION="1.85.0"
 BOOST_VERSION_UNDERSCORE="1_85_0"
 CORES=$(nproc)
 
+# --- NEW CONFIGURATION ---
+BOOST_INSTALL_PREFIX="/apps/src/boost"
+RSTUDIO_INSTALL_PREFIX="/apps/src/rstudio"
+# -------------------------
+
 echo -e "${GREEN}Starting RStudio compilation for Ubuntu 24.04${NC}"
 echo "Using $CORES CPU cores for compilation"
 
@@ -162,6 +167,7 @@ rm pandoc-${PANDOC_VERSION}-1-amd64.deb
 
 # Build Boost from source (Ubuntu 24.04's Boost is too old)
 print_status "Building Boost ${BOOST_VERSION} from source..."
+mkdir -p "$INSTALL_DIR"
 cd "$INSTALL_DIR"
 if [ ! -d "boost_${BOOST_VERSION_UNDERSCORE}" ]; then
     # Try multiple download sources for Boost
@@ -224,7 +230,7 @@ if [ "$USE_SYSTEM_BOOST" != true ] && [ -d "boost_${BOOST_VERSION_UNDERSCORE}" ]
     cd boost_${BOOST_VERSION_UNDERSCORE}
     if [ ! -f "b2" ]; then
         print_status "Bootstrapping Boost..."
-        ./bootstrap.sh --prefix=/usr/local
+        ./bootstrap.sh --prefix=/apps/src/boost
     fi
 
     print_status "Building Boost libraries (this may take 15-30 minutes)..."
@@ -232,7 +238,7 @@ if [ "$USE_SYSTEM_BOOST" != true ] && [ -d "boost_${BOOST_VERSION_UNDERSCORE}" ]
 
     print_success "Boost ${BOOST_VERSION} installed successfully!"
     cd "$INSTALL_DIR"
-    BOOST_CMAKE_FLAGS="-DBoost_ROOT=/usr/local -DBoost_INCLUDE_DIR=/usr/local/include -DBoost_LIBRARY_DIR=/usr/local/lib"
+    BOOST_CMAKE_FLAGS="-DBOOST_ROOT=/apps/src/boost -DBoost_INCLUDE_DIR=/apps/src/boost/include -DBoost_LIBRARY_DIR=/apps/src/boost/lib"
 else
     print_status "Using system Boost installation"
     BOOST_CMAKE_FLAGS="-DBoost_NO_BOOST_CMAKE=ON"
@@ -265,7 +271,7 @@ print_status "Configuring build with CMake..."
 cmake .. \
     -DRSTUDIO_TARGET=Desktop \
     -DCMAKE_BUILD_TYPE=Release \
-    -DCMAKE_INSTALL_PREFIX=/usr/local \
+    -DCMAKE_INSTALL_PREFIX=/apps/src/rstudio \
     -DRSTUDIO_BOOST_SIGNALS_VERSION=2 \
     $BOOST_CMAKE_FLAGS
 
@@ -289,7 +295,7 @@ Version=1.0
 Type=Application
 Name=RStudio
 Comment=IDE for R
-Exec=/usr/local/bin/rstudio %F
+Exec=/apps/src/rstudio/bin/rstudio %F
 Icon=rstudio
 StartupNotify=true
 MimeType=text/x-r-source;text/x-r;text/x-R;text/x-r-doc;text/x-r-sweave;text/x-r-markdown;text/x-r-html;text/x-r-presentation;application/x-r-data;application/x-r-project;text/x-r-history;text/x-r-profile;text/x-dcf;
@@ -303,7 +309,7 @@ EOF
     fi
     
     print_success "RStudio installation completed!"
-    print_status "You can now run RStudio by typing 'rstudio' in terminal or finding it in your applications menu."
+    print_status "You can now run RStudio by typing '/apps/src/rstudio/bin/rstudio' in terminal."
     
 else
     print_error "Build failed! Please check the error messages above."
@@ -325,5 +331,5 @@ echo "RStudio has been compiled and installed from source."
 echo "Build directory: $INSTALL_DIR"
 echo ""
 echo "To run RStudio:"
-echo "  - Type 'rstudio' in terminal"
+echo "  - Type '/apps/src/rstudio/bin/rstudio' in terminal"
 echo "  - Or find it in your applications menu"
