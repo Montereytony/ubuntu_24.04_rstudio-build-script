@@ -16,12 +16,8 @@ RSTUDIO_VERSION="2024.04.2+764"  # Latest stable version as of early 2024
 INSTALL_DIR="$HOME/rstudio-build"
 BOOST_VERSION="1.85.0"
 BOOST_VERSION_UNDERSCORE="1_85_0"
+SOCI_VERSION="4.0.3"
 CORES=$(nproc)
-
-# --- NEW CONFIGURATION ---
-BOOST_INSTALL_PREFIX="/apps/src/boost"
-RSTUDIO_INSTALL_PREFIX="/apps/src/rstudio"
-# -------------------------
 
 echo -e "${GREEN}Starting RStudio compilation for Ubuntu 24.04${NC}"
 echo "Using $CORES CPU cores for compilation"
@@ -91,7 +87,9 @@ sudo apt install -y \
     ca-certificates \
     gnupg \
     libbz2-dev \
-    libz-dev
+    libz-dev \
+    libsqlite3-dev \
+    postgresql-server-dev-all
 
 # Check for existing Node.js installations and handle conflicts more carefully
 print_status "Checking for existing Node.js installations..."
@@ -167,7 +165,6 @@ rm pandoc-${PANDOC_VERSION}-1-amd64.deb
 
 # Build Boost from source (Ubuntu 24.04's Boost is too old)
 print_status "Building Boost ${BOOST_VERSION} from source..."
-mkdir -p "$INSTALL_DIR"
 cd "$INSTALL_DIR"
 if [ ! -d "boost_${BOOST_VERSION_UNDERSCORE}" ]; then
     # Try multiple download sources for Boost
@@ -230,7 +227,7 @@ if [ "$USE_SYSTEM_BOOST" != true ] && [ -d "boost_${BOOST_VERSION_UNDERSCORE}" ]
     cd boost_${BOOST_VERSION_UNDERSCORE}
     if [ ! -f "b2" ]; then
         print_status "Bootstrapping Boost..."
-        ./bootstrap.sh --prefix=/apps/src/boost
+        ./bootstrap.sh --prefix=/usr/local
     fi
 
     print_status "Building Boost libraries (this may take 15-30 minutes)..."
@@ -238,11 +235,45 @@ if [ "$USE_SYSTEM_BOOST" != true ] && [ -d "boost_${BOOST_VERSION_UNDERSCORE}" ]
 
     print_success "Boost ${BOOST_VERSION} installed successfully!"
     cd "$INSTALL_DIR"
-    BOOST_CMAKE_FLAGS="-DBOOST_ROOT=/apps/src/boost -DBoost_INCLUDE_DIR=/apps/src/boost/include -DBoost_LIBRARY_DIR=/apps/src/boost/lib"
+    BOOST_CMAKE_FLAGS="-DBoost_ROOT=/usr/local -DBoost_INCLUDE_DIR=/usr/local/include -DBoost_LIBRARY_DIR=/usr/local/lib"
 else
     print_status "Using system Boost installation"
     BOOST_CMAKE_FLAGS="-DBoost_NO_BOOST_CMAKE=ON"
 fi
+
+# Build SOCI from source (required for RStudio)
+print_status "Building SOCI ${SOCI_VERSION} from source..."
+cd "$INSTALL_DIR"
+if [ ! -d "soci-${SOCI_VERSION}" ]; then
+    print_status "Downloading SOCI..."
+    wget "https://github.com/SOCI/soci/archive/refs/tags/v${SOCI_VERSION}.tar.gz" -O soci-${SOCI_VERSION}.tar.gz
+    tar -xzf soci-${SOCI_VERSION}.tar.gz
+    rm soci-${SOCI_VERSION}.tar.gz
+fi
+
+cd soci-${SOCI_VERSION}
+mkdir -p build
+cd build
+
+print_status "Configuring SOCI build..."
+cmake .. \
+    -DCMAKE_BUILD_TYPE=Release \
+    -DCMAKE_INSTALL_PREFIX=/usr/local \
+    -DSOCI_CXX11=ON \
+    -DSOCI_TESTS=OFF \
+    -DWITH_BOOST=ON \
+    -DWITH_POSTGRESQL=ON \
+    -DWITH_SQLITE3=ON \
+    $BOOST_CMAKE_FLAGS
+
+print_status "Building SOCI..."
+make -j${CORES}
+
+print_status "Installing SOCI..."
+sudo make install
+
+print_success "SOCI ${SOCI_VERSION} installed successfully!"
+cd "$INSTALL_DIR"
 
 # Create build directory
 print_status "Creating build directory..."
@@ -271,7 +302,7 @@ print_status "Configuring build with CMake..."
 cmake .. \
     -DRSTUDIO_TARGET=Desktop \
     -DCMAKE_BUILD_TYPE=Release \
-    -DCMAKE_INSTALL_PREFIX=/apps/src/rstudio \
+    -DCMAKE_INSTALL_PREFIX=/usr/local \
     -DRSTUDIO_BOOST_SIGNALS_VERSION=2 \
     $BOOST_CMAKE_FLAGS
 
@@ -295,7 +326,7 @@ Version=1.0
 Type=Application
 Name=RStudio
 Comment=IDE for R
-Exec=/apps/src/rstudio/bin/rstudio %F
+Exec=/usr/local/bin/rstudio %F
 Icon=rstudio
 StartupNotify=true
 MimeType=text/x-r-source;text/x-r;text/x-R;text/x-r-doc;text/x-r-sweave;text/x-r-markdown;text/x-r-html;text/x-r-presentation;application/x-r-data;application/x-r-project;text/x-r-history;text/x-r-profile;text/x-dcf;
@@ -309,7 +340,7 @@ EOF
     fi
     
     print_success "RStudio installation completed!"
-    print_status "You can now run RStudio by typing '/apps/src/rstudio/bin/rstudio' in terminal."
+    print_status "You can now run RStudio by typing 'rstudio' in terminal or finding it in your applications menu."
     
 else
     print_error "Build failed! Please check the error messages above."
@@ -331,5 +362,5 @@ echo "RStudio has been compiled and installed from source."
 echo "Build directory: $INSTALL_DIR"
 echo ""
 echo "To run RStudio:"
-echo "  - Type '/apps/src/rstudio/bin/rstudio' in terminal"
+echo "  - Type 'rstudio' in terminal"
 echo "  - Or find it in your applications menu"
